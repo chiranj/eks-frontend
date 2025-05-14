@@ -1,0 +1,114 @@
+# .gitlab-ci.yml - Complete CI/CD pipeline for building and pushing to Nexus
+# Includes base64 token authentication
+
+stages:
+  - build
+  - push
+
+variables:
+  # Nexus repository configuration
+  NEXUS_URL: "${NEXUS_URL}"  # e.g., nexus.example.com:8082
+  NEXUS_REPOSITORY: "${NEXUS_REPOSITORY}"  # e.g., docker-hosted
+  # Base64 Authentication Token (store as protected and masked variable)
+  NEXUS_AUTH_TOKEN: "${NEXUS_AUTH_TOKEN}"  # base64 encoded username:password
+  # Image names and tags
+  BACKEND_IMAGE_NAME: "${NEXUS_URL}/${NEXUS_REPOSITORY}/backend-service"
+  FRONTEND_IMAGE_NAME: "${NEXUS_URL}/${NEXUS_REPOSITORY}/frontend-service"
+  VERSION: "${CI_COMMIT_SHORT_SHA}"
+  # Docker settings
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
+
+# Default settings for all jobs
+default:
+  image: docker:20.10
+  services:
+    - docker:20.10-dind
+  before_script:
+    # Set up Docker authentication with base64 token
+    - mkdir -p ~/.docker
+    - |
+      cat > ~/.docker/config.json << EOF
+      {
+        "auths": {
+          "${NEXUS_URL}": {
+            "auth": "${NEXUS_AUTH_TOKEN}"
+          }
+        }
+      }
+      EOF
+    # Verify Docker is working
+    - docker info
+    # Verify Nexus authentication (optional)
+    - echo "Verifying Nexus authentication..."
+    - curl -s -H "Authorization: Basic ${NEXUS_AUTH_TOKEN}" -X GET "${NEXUS_URL}/v2/_catalog" || echo "Authentication check failed, but continuing"
+
+# Build and push backend image
+build:backend:
+  stage: build
+  script:
+    - echo "Building backend image..."
+    - cd backend
+    # Build with multiple tags
+    - docker build -t ${BACKEND_IMAGE_NAME}:${VERSION} .
+    - docker tag ${BACKEND_IMAGE_NAME}:${VERSION} ${BACKEND_IMAGE_NAME}:latest
+    # Push to Nexus
+    - echo "Pushing backend image to Nexus..."
+    - docker push ${BACKEND_IMAGE_NAME}:${VERSION}
+    - docker push ${BACKEND_IMAGE_NAME}:latest
+    - echo "Backend image pushed successfully"
+  artifacts:
+    paths:
+      - backend/
+    expire_in: 1 week
+
+# Build and push frontend image
+build:frontend:
+  stage: build
+  script:
+    - echo "Building frontend image..."
+    - cd frontend
+    # Build with multiple tags
+    - docker build -t ${FRONTEND_IMAGE_NAME}:${VERSION} .
+    - docker tag ${FRONTEND_IMAGE_NAME}:${VERSION} ${FRONTEND_IMAGE_NAME}:latest
+    # Push to Nexus
+    - echo "Pushing frontend image to Nexus..."
+    - docker push ${FRONTEND_IMAGE_NAME}:${VERSION}
+    - docker push ${FRONTEND_IMAGE_NAME}:latest
+    - echo "Frontend image pushed successfully"
+  artifacts:
+    paths:
+      - frontend/
+    expire_in: 1 week
+
+# Generate deployment manifest
+create:manifest:
+  stage: push
+  image: alpine:latest
+  script:
+    - echo "Generating deployment manifest..."
+    - |
+      cat > deployment-info.json << EOF
+      {
+        "version": "${VERSION}",
+        "images": {
+          "backend": "${BACKEND_IMAGE_NAME}:${VERSION}",
+          "frontend": "${FRONTEND_IMAGE_NAME}:${VERSION}"
+        },
+        "build_timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+        "pipeline_id": "${CI_PIPELINE_ID}",
+        "commit": {
+          "sha": "${CI_COMMIT_SHA}",
+          "ref": "${CI_COMMIT_REF_NAME}",
+          "message": "${CI_COMMIT_MESSAGE}"
+        }
+      }
+      EOF
+    - cat deployment-info.json
+  artifacts:
+    paths:
+      - deployment-info.json
+    expire_in: 1 month
+  dependencies: []
+
