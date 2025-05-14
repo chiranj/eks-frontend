@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EKS Test Application</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 20px;
+    }
+    .container {
+      background-color: #f5f5f5;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .status {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 4px;
+    }
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+    }
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+    }
+    pre {
+      background-color: #f8f9fa;
+      padding: 10px;
+      border-radius: 4px;
+      overflow-x: auto;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>EKS Test Application</h1>
+    <p>This application demonstrates communication between frontend and backend services.</p>
+    
+    <div id="connectionStatus" class="status">Connecting to backend...</div>
+    
+    <h2>Backend Connection Details:</h2>
+    <div id="backendInfo"></div>
+    
+    <h2>Messages from Backend:</h2>
+    <div id="messages"></div>
+    
+    <h2>Secret Status:</h2>
+    <div id="secretStatus"></div>
+  </div>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      const connectionStatus = document.getElementById('connectionStatus');
+      const backendInfo = document.getElementById('backendInfo');
+      const messagesDiv = document.getElementById('messages');
+      const secretStatus = document.getElementById('secretStatus');
+      
+      try {
+        const response = await fetch('/api/data');
+        const data = await response.json();
+        
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        
+        // Update connection status
+        connectionStatus.textContent = 'Connected to backend successfully!';
+        connectionStatus.classList.add('success');
+        
+        // Display backend info
+        backendInfo.innerHTML = `<p>Backend URL: ${data.backendUrl}</p>`;
+        
+        // Display messages
+        if (data.backendData && data.backendData.messages) {
+          const messagesList = data.backendData.messages.map(msg => 
+            `<li>${msg.text}</li>`
+          ).join('');
+          messagesDiv.innerHTML = `<ul>${messagesList}</ul>`;
+        }
+        
+        // Display secret status
+        if (data.backendData && data.backendData.secretStatus) {
+          secretStatus.innerHTML = `
+            <p>${data.backendData.secretStatus}</p>
+            <p>Secret preview: ${data.backendData.secretFirstChars || 'N/A'}</p>
+          `;
+        }
+        
+      } catch (error) {
+        console.error('Error:', error);
+        connectionStatus.textContent = `Error: ${error.message}`;
+        connectionStatus.classList.add('error');
+        backendInfo.innerHTML = `<p>Failed to connect to backend. Check the console for details.</p>`;
+      }
+    });
+  </script>
+</body>
+</html>

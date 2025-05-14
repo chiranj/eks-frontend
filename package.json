@@ -1,0 +1,10 @@
+{
+  "name": "frontend-service",
+  "version": "1.0.0",
+  "description": "Frontend service for EKS testing",
+  "main": "app.js",
+  "dependencies": {
+    "express": "^4.18.2",
+    "axios": "^1.5.0"
+  }
+}
